@@ -16,7 +16,16 @@ RUN apt-get -y update \
   && ./configure --prefix=/usr --libdir=/usr/lib64 && make -j4 && make install
 
 FROM ubuntu:16.04
-RUN apt-get -y update && apt-get install -y libssl1.0.0 && mkdir -p /opt/tang 
+RUN DEBIAN_FRONTEND=noninteractive \
+  apt-get -y update && \
+  apt-get -y install --no-install-recommends tcpd xinetd libssl1.0.0 && \
+  apt-get clean && \ 
+  rm -rf /var/lib/apt/lists/ && \
+  sed -i 's/^}$/cps = 0 0\nper_source = 50\n}/' /etc/xinetd.conf && \
+  grep "cps = 0" /etc/xinetd.conf && \
+  grep "per_source = 50" /etc/xinetd.conf && \
+  nl /etc/xinetd.conf && \
+  mkdir -p /opt/tang
 
 WORKDIR /opt/tang
 COPY --from=builder /opt/http-parser/libhttp_parser.so.2.8.1 .
@@ -38,7 +47,14 @@ RUN  ln -s libhttp_parser.so.2.8.1 libhttp_parser.so.2.8 \
   && mkdir -p /var/cache/tang /var/db/tang /var/log/tang 
 
 
-COPY entrypoint.sh /
+EXPOSE 80
 
-ENTRYPOINT ["/entrypoint.sh"]
+COPY tangd.xinetd /etc/xinetd.d/tangd
+COPY entrypoint.sh /usr/local/bin/
+
+ENV LD_LIBRARY_PATH /opt/tang:$LD_LIBRARY_PATH
+ENV PATH /opt/tang:$PATH
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["/usr/sbin/xinetd","-dontfork"]
 
